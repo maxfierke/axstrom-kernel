@@ -28,6 +28,7 @@
 #include <linux/mtd/plat-ram.h>
 #include <linux/pda_power.h>
 #include <linux/pwm_backlight.h>
+#include <linux/usb/gpio_vbus.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
@@ -43,13 +44,13 @@
 #include <mach/pxa27x.h>
 #include <mach/aximx50.h>
 #include <mach/pxa2xx-regs.h>
-#include <mach/pxa27x-udc.h>
+//#include <mach/pxa27x-udc.h>
 #include <mach/mfp-pxa27x.h>
 #include <plat/pxa27x_keypad.h>
 #include <mach/pxafb.h>
 #include <mach/gpio.h>
 #include <mach/mmc.h>
-#include <mach/udc.h>
+//#include <mach/udc.h>
 #include <mach/regs-ost.h>
 #include <mach/regs-lcd.h>
 
@@ -365,7 +366,7 @@ static struct platform_device aximx50_gpio_keys_device = {
 	.gpio_vbus_inverted = 1,
 };*/
 
-/*static struct gpio_vbus_mach_info gpio_vbus_info = {
+static struct gpio_vbus_mach_info gpio_vbus_info = {
 	.gpio_pullup        = GPIO_NR_X50_USB_PULLUP,
 	.gpio_vbus          = GPIO_NR_X50_USB_CABLE_DETECT,
 	.gpio_vbus_inverted = 0,
@@ -377,7 +378,7 @@ static struct platform_device gpio_vbus = {
 	.dev = {
 		.platform_data = &gpio_vbus_info,
 	},
-};*/
+};
 
 
 /*
@@ -713,6 +714,7 @@ static struct platform_device *devices[] __initdata = {
 	//&aximx50_bt,
 	&aximx50_gpio_keys_device,
 	&backlight,
+	&gpio_vbus,
 	&power_supply,
 };
 
