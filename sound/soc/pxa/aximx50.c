@@ -27,7 +27,6 @@
 #include <mach/audio.h>
 
 #include "../codecs/wm8750.h"
-#include "pxa2xx-pcm.h"
 #include "pxa2xx-i2s.h"
 
 #define AXIMX50_SPK_ON    0

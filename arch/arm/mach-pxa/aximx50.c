@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2009 Ertan Deniz
  * Copyright (c) 2010-2011 Paul Burton <paulburton89@gmail.com>
+ * Copyright (c) 2010-2011 Max Fierke <max@maxfierke.com>
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive for
@@ -12,6 +13,9 @@
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/device.h>
+#include <linux/fb.h>
+#include <linux/gpio.h>
+#include <linux/lcd.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
@@ -22,22 +26,26 @@
 #include <linux/module.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/plat-ram.h>
+#include <linux/pda_power.h>
+#include <linux/pwm_backlight.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
-#include <mach/pxa2xx_spi.h>
+#include <linux/spi/pxa2xx_spi.h>
 
 #include <asm/mach-types.h>
 #include <mach/hardware.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 
-#include <plat/i2c.h>
+#include <linux/i2c/pxa-i2c.h>
 
+#include <mach/pxa27x.h>
 #include <mach/aximx50.h>
 #include <mach/pxa2xx-regs.h>
+#include <mach/pxa27x-udc.h>
 #include <mach/mfp-pxa27x.h>
-#include <mach/pxa27x_keypad.h>
+#include <plat/pxa27x_keypad.h>
 #include <mach/pxafb.h>
 #include <mach/gpio.h>
 #include <mach/mmc.h>
@@ -351,10 +359,82 @@ static struct platform_device aximx50_gpio_keys_device = {
  * USB Gadget
  ****************************************************************/
 
-static struct pxa2xx_udc_mach_info x50_udc_info = {
-	.gpio_vbus_inverted = false,
+/*static struct pxa2xx_udc_mach_info aximx50_udc_info = {
 	.gpio_vbus = GPIO_NR_X50_USB_CABLE_DETECT,
-//  .gpio_pullup =
+	.gpio_pullup = GPIO_NR_X50_USB_PULLUP,
+	.gpio_vbus_inverted = 1,
+};*/
+
+/*static struct gpio_vbus_mach_info gpio_vbus_info = {
+	.gpio_pullup        = GPIO_NR_X50_USB_PULLUP,
+	.gpio_vbus          = GPIO_NR_X50_USB_CABLE_DETECT,
+	.gpio_vbus_inverted = 0,
+};
+
+static struct platform_device gpio_vbus = {
+	.name          = "gpio-vbus",
+	.id            = -1,
+	.dev = {
+		.platform_data = &gpio_vbus_info,
+	},
+};*/
+
+
+/*
+ *	Power Supply
+ */
+static int power_supply_init(struct device *dev)
+{
+	return gpio_request(GPIO_NR_X50_AC_IN_N, "AC charger detect");
+}
+
+static int aximx50_is_ac_online(void)
+{
+	return !gpio_get_value(GPIO_NR_X50_AC_IN_N);
+}
+
+static void power_supply_exit(struct device *dev)
+{
+	gpio_free(GPIO_NR_X50_AC_IN_N);
+}
+
+static char *aximx50_supplicants[] = {
+	"main-battery", "backup-battery"
+};
+
+static struct pda_power_pdata power_supply_info = {
+	.init            = power_supply_init,
+	.is_ac_online    = aximx50_is_ac_online,
+	.exit            = power_supply_exit,
+	.supplied_to     = aximx50_supplicants,
+	.num_supplicants = ARRAY_SIZE(aximx50_supplicants),
+};
+
+static struct resource power_supply_resources[] = {
+	[0] = {
+		.name  = "ac",
+		.flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE |
+		         IORESOURCE_IRQ_LOWEDGE,
+		.start = gpio_to_irq(GPIO_NR_X50_AC_IN_N),
+		.end   = gpio_to_irq(GPIO_NR_X50_AC_IN_N),
+	},
+	[1] = {
+		.name  = "usb",
+		.flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE |
+		         IORESOURCE_IRQ_LOWEDGE,
+		.start = gpio_to_irq(GPIO_NR_X50_USB_CABLE_DETECT),
+		.end   = gpio_to_irq(GPIO_NR_X50_USB_CABLE_DETECT),
+	},
+};
+
+static struct platform_device power_supply = {
+	.name = "pda-power",
+	.id   = -1,
+	.dev  = {
+		.platform_data = &power_supply_info,
+	},
+	.resource      = power_supply_resources,
+	.num_resources = ARRAY_SIZE(power_supply_resources),
 };
 
 /*
@@ -397,16 +477,18 @@ static struct ads7846_platform_data aximx50_ts_info = {
 	.gpio_pendown       = GPIO_NR_X50_PEN_IRQ_N,
 };
 
-static struct spi_board_info __initdata aximx50_boardinfo[] = { {
-	.modalias         = "ads7846",
-	.platform_data    = &aximx50_ts_info,
-	.controller_data  = &ads_hw,
-	.irq              = X50_IRQ(PEN_IRQ_N),
-	.max_speed_hz     = 100000 /* max sample rate at 3V */
-	                    * 26 /* command + data + overhead */,
-	.bus_num          = 1,
-	.chip_select      = 0,
-} };
+static struct spi_board_info __initdata aximx50_boardinfo[] = { 
+	{
+		.modalias         = "ads7846",
+		.platform_data    = &aximx50_ts_info,
+		.controller_data  = &ads_hw,
+		.irq              = X50_IRQ(PEN_IRQ_N),
+		.max_speed_hz     = 100000 /* max sample rate at 3V */
+			            * 26 /* command + data + overhead */,
+		.bus_num          = 1,
+		.chip_select      = 0,
+	} 
+};
 
 /*
  * PXA Framebuffer
@@ -570,7 +652,7 @@ static void __init aximx50_init_display(void)
 
 	if (lcd_type % 2) {
 		printk(KERN_DEBUG "Using PXA Framebuffer (QVGA)\n");
-		set_pxa_fb_info(&aximx50_fb_info_qvga);
+		pxa_set_fb_info(NULL, &aximx50_fb_info_qvga);
 	}
 	else {
 		printk(KERN_DEBUG "Using PXA Framebuffer (VGA)\n");
@@ -596,7 +678,7 @@ static void __init aximx50_init_display(void)
 			printk(KERN_ERR "Unable to map 2700G registers\n");
 		}
 
-		set_pxa_fb_info(&aximx50_fb_info_vga);
+		pxa_set_fb_info(NULL, &aximx50_fb_info_vga);
 	}
 
 #if defined(CONFIG_FB_MBX) || defined(CONFIG_FB_MBX_MODULE)
@@ -604,7 +686,25 @@ static void __init aximx50_init_display(void)
 #endif
 }
 
+/*
+ * Backlight
+ */
 
+static struct platform_pwm_backlight_data backlight_data = {
+	.pwm_id         = 0,
+	.max_brightness = 200,
+	.dft_brightness = 100,
+	.pwm_period_ns  = 30923,
+};
+
+static struct platform_device backlight = {
+	.name = "pwm-backlight",
+	.id   = -1,
+	.dev  = {
+		.parent        = &pxa27x_device_pwm0.dev,
+		.platform_data = &backlight_data,
+	},
+};
 
 
 /******************************************************/
@@ -612,6 +712,8 @@ static void __init aximx50_init_display(void)
 static struct platform_device *devices[] __initdata = {
 	//&aximx50_bt,
 	&aximx50_gpio_keys_device,
+	&backlight,
+	&power_supply,
 };
 
 /*
@@ -622,16 +724,6 @@ static struct i2c_pxa_platform_data aximx50_i2c_info = {
 	.fast_mode = 1,
 	.use_pio = 0,
 };
-
-static void __init aximx50_map_io(void)
-{
-	pxa_map_io();
-}
-
-static void __init aximx50_init_irq(void)
-{
-	pxa27x_init_irq();
-}
 
 static void __init aximx50_init( void )
 {
@@ -662,19 +754,15 @@ static void __init aximx50_init( void )
 	/* USB power? */
 	aximx50_fpga_set(0x1c, 0x8);
 
-	pxa_set_udc_info(&x50_udc_info);
+	//pxa_set_udc_info(&aximx50_udc_info);
 	
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }
 
-
 MACHINE_START(X50, "Axim x50/x51(v)")
-	.phys_io = 0x40000000,
-	.io_pg_offst = (io_p2v(0x40000000) >> 18) & 0xfffc,
 	.boot_params = 0xa8000100,
-	.map_io = aximx50_map_io,
-	.init_irq = aximx50_init_irq,
+	.map_io = pxa27x_map_io,
+	.init_irq = pxa27x_init_irq,
 	.timer = &pxa_timer,
 	.init_machine = aximx50_init,
 MACHINE_END
-

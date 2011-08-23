@@ -270,6 +270,7 @@ config MACH_X50
 	bool "Dell Axim X50/X51(v)"
 	select PXA27x
 	select KEYBOARD_GPIO
+	select HAVE_PWM
 	help
 	  Say Y here if you plan to boot the kernel on the Dell Axim X50/X51(v)
 	  series of PDAs. Currently there is only basic support for this
